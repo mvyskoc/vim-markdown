@@ -578,21 +578,59 @@ endfunction
 
 " We need a definition guard because we invoke 'edit' which will reload this
 " script while this function is running. We must not replace it.
+
+if !exists("*s:FollowLinkUnderCursor")
+  function! s:FollowLinkUnderCursor()
+      let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
+      if l:url =~ '^\a\+://' 
+          "call s:VersionAwareNetrwBrowseX(l:url)
+          if has("win32") || has ('win64')
+            silent execute "!start ".l:url
+          else
+            silent execute "!xdg-open ".l:url
+          endif
+          
+      elseif l:url != ''
+          call s:EditUrl(l:url)
+      endif
+  endfunction
+endif
+
+if !exists("*s:EditUrl")
+  function s:EditUrl(url)
+      if get(g:, 'vim_markdown_autowrite', 0)
+        write
+      endif
+      let l:buffer_path = expand('%:p')
+      if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
+        execute 'edit' fnamemodify(expand('%:~'), ':p:h').'/'.a:url.'.md'
+        let b:markdown_prev_link = buffer_path 
+      else
+        execute 'edit' a:url 
+        let b:markdown_prev_link = buffer_path 
+      endif
+  endfunction
+endif
+
 if !exists("*s:EditUrlUnderCursor")
   function s:EditUrlUnderCursor()
       let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
       if l:url != ''
-          if get(g:, 'vim_markdown_autowrite', 0)
-            write
-          endif
-          if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
-              execute 'edit' fnamemodify(expand('%:~'), ':p:h').'/'.l:url.'.md'
-          else
-              execute 'edit' l:url 
-          endif
+          call s:EditUrl(l:url)   
       else
           echomsg 'The cursor is not on a link.'
       endif
+  endfunction
+endif
+
+if !exists("*s:GoBackLink")
+  function s:GoBackLink()
+       if get(g:, 'vim_markdown_autowrite', 0)
+           write
+       endif
+       if exists('b:markdown_prev_link') 
+          execute 'edit' b:markdown_prev_link 
+       endif 
   endfunction
 endif
 
@@ -619,6 +657,8 @@ call <sid>MapNormVis('<Plug>Markdown_MoveToParentHeader', '<sid>MoveToParentHead
 call <sid>MapNormVis('<Plug>Markdown_MoveToCurHeader', '<sid>MoveToCurHeader')
 nnoremap <Plug>Markdown_OpenUrlUnderCursor :call <sid>OpenUrlUnderCursor()<cr>
 nnoremap <Plug>Markdown_EditUrlUnderCursor :call <sid>EditUrlUnderCursor()<cr>
+nnoremap <Plug>Markdown_GoBackLink :call <sid>GoBackLink()<cr>
+nnoremap <Plug>Markdown_FollowLinkUnderCursor :call <sid>FollowLinkUnderCursor()<cr>
 
 if !get(g:, 'vim_markdown_no_default_key_mappings', 0)
     call <sid>MapNotHasmapto(']]', 'Markdown_MoveToNextHeader')
@@ -629,6 +669,8 @@ if !get(g:, 'vim_markdown_no_default_key_mappings', 0)
     call <sid>MapNotHasmapto(']c', 'Markdown_MoveToCurHeader')
     call <sid>MapNotHasmapto('gx', 'Markdown_OpenUrlUnderCursor')
     call <sid>MapNotHasmapto('ge', 'Markdown_EditUrlUnderCursor')
+    call <sid>MapNotHasmapto('<BS>', 'Markdown_GoBackLink')
+    call <sid>MapNotHasmapto('<CR>', 'Markdown_FollowLinkUnderCursor')
 endif
 
 command! -buffer -range=% HeaderDecrease call s:HeaderDecrease(<line1>, <line2>)
