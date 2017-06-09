@@ -565,14 +565,11 @@ function! s:Markdown_GetUrlForPosition(lnum, col)
     return getline(l:lnum)[l:left - 1 : l:right - 1]
 endfunction
 
-" Front end for GetUrlForPosition.
-"
-function! s:OpenUrlUnderCursor()
-    let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
-    if l:url != ''
-        call s:VersionAwareNetrwBrowseX(l:url)
+function! s:OpenLinkInExtApp(url)
+    if has("win32") || has ('win64')
+        silent execute "! start ".a:url
     else
-        echomsg 'The cursor is not on a link.'
+        silent execute "! xdg-open ".a:url
     endif
 endfunction
 
@@ -582,16 +579,14 @@ endfunction
 if !exists("*s:FollowLinkUnderCursor")
   function! s:FollowLinkUnderCursor()
       let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
-      if l:url =~ '^\a\+://' 
-          "call s:VersionAwareNetrwBrowseX(l:url)
-          if has("win32") || has ('win64')
-            silent execute "!start ".l:url
-          else
-            silent execute "!xdg-open ".l:url
-          endif
-          
-      elseif l:url != ''
+      if l:url == ''
+          return
+      elseif l:url =~ '^\a\+://' 
+          call s:OpenLinkInExtApp(l:url)
+      elseif (l:url !~ '\..\+$') || (l:url =~ '\.md$')
           call s:EditUrl(l:url)
+      else
+          call s:OpenLinkInExtApp(l:url)
       endif
   endfunction
 endif
@@ -599,26 +594,19 @@ endif
 if !exists("*s:EditUrl")
   function s:EditUrl(url)
       if get(g:, 'vim_markdown_autowrite', 0)
-        write
+            write
       endif
       let l:buffer_path = expand('%:p')
       if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
-        execute 'edit' fnamemodify(expand('%:~'), ':p:h').'/'.a:url.'.md'
-        let b:markdown_prev_link = buffer_path 
+          if a:url =~ '\.md$'
+              execute 'edit' fnamemodify(expand('%:~'), ':p:h').'/'.a:url
+          else
+              execute 'edit' fnamemodify(expand('%:~'), ':p:h').'/'.a:url.'.md'
+          endif
+      let b:markdown_prev_link = buffer_path 
       else
-        execute 'edit' a:url 
-        let b:markdown_prev_link = buffer_path 
-      endif
-  endfunction
-endif
-
-if !exists("*s:EditUrlUnderCursor")
-  function s:EditUrlUnderCursor()
-      let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
-      if l:url != ''
-          call s:EditUrl(l:url)   
-      else
-          echomsg 'The cursor is not on a link.'
+          execute 'edit' a:url 
+          let b:markdown_prev_link = buffer_path 
       endif
   endfunction
 endif
@@ -634,14 +622,6 @@ if !exists("*s:GoBackLink")
   endfunction
 endif
 
-function! s:VersionAwareNetrwBrowseX(url)
-    if has('patch-7.4.567')
-        call netrw#BrowseX(a:url, 0)
-    else
-        call netrw#NetrwBrowseX(a:url, 0)
-    endif
-endf
-
 function! s:MapNotHasmapto(lhs, rhs)
     if !hasmapto('<Plug>' . a:rhs)
         execute 'nmap <buffer>' . a:lhs . ' <Plug>' . a:rhs
@@ -655,8 +635,6 @@ call <sid>MapNormVis('<Plug>Markdown_MoveToNextSiblingHeader', '<sid>MoveToNextS
 call <sid>MapNormVis('<Plug>Markdown_MoveToPreviousSiblingHeader', '<sid>MoveToPreviousSiblingHeader')
 call <sid>MapNormVis('<Plug>Markdown_MoveToParentHeader', '<sid>MoveToParentHeader')
 call <sid>MapNormVis('<Plug>Markdown_MoveToCurHeader', '<sid>MoveToCurHeader')
-nnoremap <Plug>Markdown_OpenUrlUnderCursor :call <sid>OpenUrlUnderCursor()<cr>
-nnoremap <Plug>Markdown_EditUrlUnderCursor :call <sid>EditUrlUnderCursor()<cr>
 nnoremap <Plug>Markdown_GoBackLink :call <sid>GoBackLink()<cr>
 nnoremap <Plug>Markdown_FollowLinkUnderCursor :call <sid>FollowLinkUnderCursor()<cr>
 
@@ -667,8 +645,6 @@ if !get(g:, 'vim_markdown_no_default_key_mappings', 0)
     call <sid>MapNotHasmapto('[]', 'Markdown_MoveToPreviousSiblingHeader')
     call <sid>MapNotHasmapto(']u', 'Markdown_MoveToParentHeader')
     call <sid>MapNotHasmapto(']c', 'Markdown_MoveToCurHeader')
-    call <sid>MapNotHasmapto('gx', 'Markdown_OpenUrlUnderCursor')
-    call <sid>MapNotHasmapto('ge', 'Markdown_EditUrlUnderCursor')
     call <sid>MapNotHasmapto('<BS>', 'Markdown_GoBackLink')
     call <sid>MapNotHasmapto('<CR>', 'Markdown_FollowLinkUnderCursor')
 endif
