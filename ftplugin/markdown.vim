@@ -573,18 +573,41 @@ function! s:OpenLinkInExtApp(url)
     endif
 endfunction
 
+function! s:NameToAnchorId(name)
+    let l:id = substitute(a:name, '[ ]', '-', 'g') 
+    let l:id = substitute(l:id, '\V\[!.,:?@#$%^&*()<>\\/|"]', '', 'g') 
+	return l:id
+endfunction
+
+function! s:JumpToAnchor(id)
+    let l:l = 1
+    while(l:l < line("$") )
+        if join(getline(l:l, l:l + 1), "\n") =~ s:headersRegexp
+		    let l:header_name = substitute(getline(l:l), '^#\+\s\+', '', '')
+			let l:header_id = s:NameToAnchorId(header_name)
+			if a:id ==? l:header_id
+				call cursor(l:l, 1)	
+			endif
+        endif
+        let l:l += 1
+    endwhile
+endfunction
+
 " We need a definition guard because we invoke 'edit' which will reload this
 " script while this function is running. We must not replace it.
 
 if !exists("*s:FollowLinkUnderCursor")
   function! s:FollowLinkUnderCursor()
       let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
+      let l:url_path = substitute(l:url, '#.*', '', '') 
+      let l:url_anchor = substitute(l:url, '[^#]*#', '', '')
+
       if l:url == ''
           return
       elseif l:url =~ '^\a\+://' 
           call s:OpenLinkInExtApp(l:url)
       elseif (l:url !~ '\..\+$') || (l:url =~ '\.md$')
-          call s:EditUrl(l:url)
+          call s:EditUrl(l:url_path, l:url_anchor)
       else
           call s:OpenLinkInExtApp(l:url)
       endif
@@ -592,32 +615,47 @@ if !exists("*s:FollowLinkUnderCursor")
 endif
 
 if !exists("*s:EditUrl")
-  function s:EditUrl(url)
-      if get(g:, 'vim_markdown_autowrite', 0)
-            write
-      endif
+  function s:EditUrl(url, anchor)
       let l:buffer_path = expand('%:p')
-      if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
-          if a:url =~ '\.md$'
-              execute 'edit' fnamemodify(expand('%:~'), ':p:h').'/'.a:url
-          else
-              execute 'edit' fnamemodify(expand('%:~'), ':p:h').'/'.a:url.'.md'
-          endif
-      let b:markdown_prev_link = buffer_path 
-      else
-          execute 'edit' a:url 
-          let b:markdown_prev_link = buffer_path 
+      let l:cursor_position = getpos(".")
+      
+      if a:url != '' 
+		  if get(g:, 'vim_markdown_autowrite', 0)
+				write
+		  endif
+		  let l:fullpath = fnamemodify(expand('%:~'), ':p:h').'/'.a:url
+		  if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
+			  if a:url !~? '\.md$'
+				  let l:fullpath = l:fullpath.'.md'
+			  endif
+		  endif
+
+		  if l:buffer_path !=# l:fullpath
+			   execute 'edit' l:fullpath
+		  endif
       endif
+
+      if a:anchor != ''
+          call s:JumpToAnchor(a:anchor)
+      endif
+
+      let b:markdown_prev_link = l:buffer_path 
+      let b:markdown_prev_position = l:cursor_position
   endfunction
 endif
 
 if !exists("*s:GoBackLink")
   function s:GoBackLink()
-       if get(g:, 'vim_markdown_autowrite', 0)
+       if get(g:, 'vim_markdown_autowrite', 0) && (&modified == 1)
+	   " We check if the buffer was modified, because we don't want create
+	   " new empty files when the user follow new links and write nothing to
+	   " buffer.
            write
        endif
        if exists('b:markdown_prev_link') 
+	  let l:prev_position = b:markdown_prev_position
           execute 'edit' b:markdown_prev_link 
+	  call setpos('.', l:prev_position)
        endif 
   endfunction
 endif
@@ -757,6 +795,13 @@ function! s:MarkdownClearSyntaxVariables()
     endif
 endfunction
 
+function! s:MarkdownBufferWrite()
+    let l:buffer_dir = expand('%:p:h')
+    if !isdirectory(l:buffer_dir)
+        call mkdir(expand(l:buffer_dir), 'p')
+    endif
+endfunction
+
 augroup Mkd
     autocmd!
     au BufWinEnter * call s:MarkdownRefreshSyntax(1)
@@ -764,4 +809,5 @@ augroup Mkd
     au BufWritePost * call s:MarkdownRefreshSyntax(0)
     au InsertEnter,InsertLeave * call s:MarkdownRefreshSyntax(0)
     au CursorHold,CursorHoldI * call s:MarkdownRefreshSyntax(0)
+	au BufWrite * call s:MarkdownBufferWrite() 
 augroup END
