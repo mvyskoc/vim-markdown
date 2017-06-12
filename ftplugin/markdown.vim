@@ -573,21 +573,31 @@ function! s:OpenLinkInExtApp(url)
     endif
 endfunction
 
-function! s:NameToAnchorId(name)
+" name - is translated to html anchor-id where:
+"   all spaces are replaced by dash
+"   all symbols are removed
+" name-counter - is counter dict object of same anchor-id's. ID's with counter
+" value > 0 are suffixed with '-'.counter
+function! s:NameToAnchorId(name, name_counter)
     let l:id = substitute(a:name, '[ ]', '-', 'g') 
     let l:id = substitute(l:id, '\V\[!.,:?@#$%^&*()<>\\/|"]', '', 'g') 
-	return l:id
+    let a:name_counter[l:id] = get(a:name_counter, l:id, -1) + 1
+    if a:name_counter[l:id] > 0
+        let l:id .= '-'.a:name_counter[l:id]
+    endif
+    return l:id
 endfunction
 
 function! s:JumpToAnchor(id)
     let l:l = 1
+    let l:name_counter = {}
     while(l:l < line("$") )
         if join(getline(l:l, l:l + 1), "\n") =~ s:headersRegexp
-		    let l:header_name = substitute(getline(l:l), '^#\+\s\+', '', '')
-			let l:header_id = s:NameToAnchorId(header_name)
-			if a:id ==? l:header_id
-				call cursor(l:l, 1)	
-			endif
+            let l:header_name = substitute(getline(l:l), '\(^#\+\s\+\)\|\(\s*$\)', '', 'g')
+            let l:header_id = s:NameToAnchorId(l:header_name, l:name_counter)
+            if a:id ==? l:header_id
+                call cursor(l:l, 1) 
+            endif
         endif
         let l:l += 1
     endwhile
@@ -620,19 +630,19 @@ if !exists("*s:EditUrl")
       let l:cursor_position = getpos(".")
       
       if a:url != '' 
-		  if get(g:, 'vim_markdown_autowrite', 0)
-				write
-		  endif
-		  let l:fullpath = fnamemodify(expand('%:~'), ':p:h').'/'.a:url
-		  if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
-			  if a:url !~? '\.md$'
-				  let l:fullpath = l:fullpath.'.md'
-			  endif
-		  endif
+          if get(g:, 'vim_markdown_autowrite', 0)
+                write
+          endif
+          let l:fullpath = fnamemodify(expand('%:~'), ':p:h').'/'.a:url
+          if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
+              if a:url !~? '\.md$'
+                  let l:fullpath = l:fullpath.'.md'
+              endif
+          endif
 
-		  if l:buffer_path !=# l:fullpath
-			   execute 'edit' l:fullpath
-		  endif
+          if l:buffer_path !=# l:fullpath
+               execute 'edit' l:fullpath
+          endif
       endif
 
       if a:anchor != ''
@@ -647,15 +657,15 @@ endif
 if !exists("*s:GoBackLink")
   function s:GoBackLink()
        if get(g:, 'vim_markdown_autowrite', 0) && (&modified == 1)
-	   " We check if the buffer was modified, because we don't want create
-	   " new empty files when the user follow new links and write nothing to
-	   " buffer.
+       " We check if the buffer was modified, because we don't want create
+       " new empty files when the user follow new links and write nothing to
+       " buffer.
            write
        endif
        if exists('b:markdown_prev_link') 
-	  let l:prev_position = b:markdown_prev_position
+          let l:prev_position = b:markdown_prev_position
           execute 'edit' b:markdown_prev_link 
-	  call setpos('.', l:prev_position)
+          call setpos('.', l:prev_position)
        endif 
   endfunction
 endif
@@ -809,5 +819,5 @@ augroup Mkd
     au BufWritePost * call s:MarkdownRefreshSyntax(0)
     au InsertEnter,InsertLeave * call s:MarkdownRefreshSyntax(0)
     au CursorHold,CursorHoldI * call s:MarkdownRefreshSyntax(0)
-	au BufWrite * call s:MarkdownBufferWrite() 
+    au BufWrite * call s:MarkdownBufferWrite() 
 augroup END
