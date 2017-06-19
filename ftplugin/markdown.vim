@@ -316,7 +316,7 @@ function! s:Toc(...)
         let l:lineraw = getline(i)
         let l:l1 = getline(i+1)
         let l:line = substitute(l:lineraw, "#", "\\\#", "g")
-        if l:line =~ '````*' || l:line =~ '\~\~\~\~*'
+        if l:line =~ '```*' || l:line =~ '\~\~\~\~*'
             if l:fenced_block == 0
                 let l:fenced_block = 1
             elseif l:fenced_block == 1
@@ -565,13 +565,40 @@ function! s:Markdown_GetUrlForPosition(lnum, col)
     return getline(l:lnum)[l:left - 1 : l:right - 1]
 endfunction
 
+function! s:IsAbsPath(url)
+    let l:is_abspath = '\(^\a\+://\)'       "Is URL path protocol://
+    let l:is_abspath .= '\|\(^/\)'          "Is linux abs path /dir
+    let l:is_abspath .= '\|\(^\a:\)'        "Is Windows abs path c:\dir
+    let l:is_abspath .= '\|\(^\\\\\a\+\)'   "Is UNC path
+     
+    return a:url =~ l:is_abspath 
+endfunction
+
+function! s:ExpandUrlPath(url)
+    let l:fullpath = a:url
+    if !s:IsAbsPath(a:url)
+        let l:fullpath = fnamemodify(expand('%:~'), ':p:h').'/'.a:url
+    endif
+
+    if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
+        " if there is no file extension and the file does not exist, we add the
+        " default .md extension. 
+    	if (a:url !~? '\..\+$') && (findfile(a:url) == '') 
+            let l:fullpath = l:fullpath.'.md'
+        endif
+    endif
+    return l:fullpath 
+endfunction
+
 function! s:OpenLinkInExtApp(url)
+    let l:fullpath = s:ExpandUrlPath(a:url)
     if has("win32") || has ('win64')
-        silent execute "! start ".a:url
+        silent execute "! start ".l:fullpath
     else
-        silent execute "! xdg-open ".a:url
+        silent execute "! xdg-open ".l:fullpath
     endif
 endfunction
+
 
 " name - is translated to html anchor-id where:
 "   all spaces are replaced by dash
@@ -592,19 +619,48 @@ function! s:JumpToAnchor(id)
     let l:l = 1
     let l:name_counter = {}
     while(l:l < line("$") )
+        let l:is_anchor = 1
         if join(getline(l:l, l:l + 1), "\n") =~ s:headersRegexp
             let l:header_name = substitute(getline(l:l), '\(^#\+\s\+\)\|\(\s*$\)', '', 'g')
-            let l:header_id = s:NameToAnchorId(l:header_name, l:name_counter)
-            if a:id ==? l:header_id
+            let l:anchor_id = s:NameToAnchorId(l:header_name, l:name_counter)
+            if a:id ==? l:anchor_id
                 call cursor(l:l, 1) 
+                break
             endif
+        elseif match(getline(l:l), 
+               \     '\c<a\s\+\(\%(name\)\|\%(id\)\)\s*=\s*"'.a:id.'"\s*/\?>'
+               \    ) >= 0
+            call cursor(l:l, 1)
+            break
         endif
         let l:l += 1
     endwhile
 endfunction
 
+" Front end for GetUrlForPosition.
+"
+function! s:OpenUrlUnderCursor()
+    let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
+    if l:url != ''
+        call s:OpenLinkInExtApp(l:url)
+    endif
+endfunction
+
 " We need a definition guard because we invoke 'edit' which will reload this
 " script while this function is running. We must not replace it.
+
+if !exists("*s:EditUrlUnderCursor")
+  function s:EditUrlUnderCursor()
+      let l:url = s:Markdown_GetUrlForPosition(line('.'), col('.'))
+      let l:url_path = substitute(l:url, '#.*', '', '') 
+      let l:url_anchor = substitute(l:url, '[^#]*#', '', '')
+      if l:url == ''
+          return
+      endif
+
+      call s:EditUrl(l:url_path, l:url_anchor)      
+  endfunction
+endif
 
 if !exists("*s:FollowLinkUnderCursor")
   function! s:FollowLinkUnderCursor()
@@ -633,13 +689,7 @@ if !exists("*s:EditUrl")
           if get(g:, 'vim_markdown_autowrite', 0)
                 write
           endif
-          let l:fullpath = fnamemodify(expand('%:~'), ':p:h').'/'.a:url
-          if get(g:, 'vim_markdown_no_extensions_in_markdown', 0)
-              if a:url !~? '\.md$'
-                  let l:fullpath = l:fullpath.'.md'
-              endif
-          endif
-
+          let l:fullpath = s:ExpandUrlPath(a:url)
           if l:buffer_path !=# l:fullpath
                execute 'edit' l:fullpath
           endif
@@ -677,12 +727,21 @@ function! s:MapNotHasmapto(lhs, rhs)
     endif
 endfunction
 
+function! s:MapNotHasmaptoGlobal(lhs, rhs)
+    if !hasmapto('<Plug>' . a:rhs)
+        execute 'nmap' . a:lhs . ' <Plug>' . a:rhs
+        execute 'vmap' . a:lhs . ' <Plug>' . a:rhs
+    endif
+endfunction
+
 call <sid>MapNormVis('<Plug>Markdown_MoveToNextHeader', '<sid>MoveToNextHeader')
 call <sid>MapNormVis('<Plug>Markdown_MoveToPreviousHeader', '<sid>MoveToPreviousHeader')
 call <sid>MapNormVis('<Plug>Markdown_MoveToNextSiblingHeader', '<sid>MoveToNextSiblingHeader')
 call <sid>MapNormVis('<Plug>Markdown_MoveToPreviousSiblingHeader', '<sid>MoveToPreviousSiblingHeader')
 call <sid>MapNormVis('<Plug>Markdown_MoveToParentHeader', '<sid>MoveToParentHeader')
 call <sid>MapNormVis('<Plug>Markdown_MoveToCurHeader', '<sid>MoveToCurHeader')
+nnoremap <Plug>Markdown_OpenUrlUnderCursor :call <sid>OpenUrlUnderCursor()<cr>
+nnoremap <Plug>Markdown_EditUrlUnderCursor :call <sid>EditUrlUnderCursor()<cr>
 nnoremap <Plug>Markdown_GoBackLink :call <sid>GoBackLink()<cr>
 nnoremap <Plug>Markdown_FollowLinkUnderCursor :call <sid>FollowLinkUnderCursor()<cr>
 
@@ -693,7 +752,12 @@ if !get(g:, 'vim_markdown_no_default_key_mappings', 0)
     call <sid>MapNotHasmapto('[]', 'Markdown_MoveToPreviousSiblingHeader')
     call <sid>MapNotHasmapto(']u', 'Markdown_MoveToParentHeader')
     call <sid>MapNotHasmapto(']c', 'Markdown_MoveToCurHeader')
-    call <sid>MapNotHasmapto('<BS>', 'Markdown_GoBackLink')
+    call <sid>MapNotHasmapto('gx', 'Markdown_OpenUrlUnderCursor')
+    call <sid>MapNotHasmapto('ge', 'Markdown_EditUrlUnderCursor')
+
+    " We use global mapping not buffer, to we can return back when we followed not
+    " markdown file.
+    call <sid>MapNotHasmaptoGlobal('<BS>', 'Markdown_GoBackLink')
     call <sid>MapNotHasmapto('<CR>', 'Markdown_FollowLinkUnderCursor')
 endif
 
@@ -821,3 +885,5 @@ augroup Mkd
     au CursorHold,CursorHoldI * call s:MarkdownRefreshSyntax(0)
     au BufWrite * call s:MarkdownBufferWrite() 
 augroup END
+
+" vim: ts=4 sw=4 et  
