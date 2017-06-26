@@ -1,0 +1,17 @@
+--langdef=markdown
+--langmap=markdown:.md
+--regex-markdown=/^(.+)[[:cntrl:]]{1,3}^(===+)/\1/d,Header_L1/{_multiline=1}
+--regex-markdown=/^(.+)[[:cntrl:]]{1,3}^(---+)/\1/g,Header_L2/{_multiline=1}
+--regex-markdown=/^#[ \t]+(.*)/\1/D,Header_1/
+--regex-markdown=/^##[ \t]+(.*)/\1/G,Header_2/
+--regex-markdown=/^###[ \t]+(.*)/\1/h,Header_3/
+--regex-markdown=/^####[ \t]+(.*)/\1/j,Header_4/
+--regex-markdown=/^#####[ \t]+(.*)/\1/k,Header_5/
+--regex-markdown=/^######[ \t]+(.*)/\1/l,Header_6/
+
+--regex-markdown=/([^\*\\]|^)\*(([^\* ]|(\\\*))([^\*\\]|(\\\*)|(\\))+)\*/\2/I,Text*Italic*/{_multiline=2}
+--regex-markdown=/([[:space:]]|^)_(([^_ ]|(\\_))([^_\\]|(\\_)|(\\))+)_/\2/i,Text_Italic_/{_multiline=2}
+--regex-markdown=/([^\*\\]|^)\*\*(([^\* ]|(\\\*))([^\*\\]|(\\\*)|(\\))+)\*\*/\2/B,Text**Bold**/{_multiline=2}
+--regex-markdown=/([^_\\]|^)__(([^_ ]|(\\_))([^_\\]|(\\_)|(\\))+)__/\2/b,Text__Bold__/{_multiline=2}
+--regex-markdown=/<[aA] (([iI][dD])|([nN][aA][mM][eE]))="([^"]+)"\/?>/\4/a,Html_Anchor/{_multiline=4}
+--excmd=number

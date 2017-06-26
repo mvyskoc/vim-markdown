@@ -45,6 +45,8 @@
 "   |
 " e-+
 
+let s:pluginPath = expand('<sfile>:p:h:h')
+
 " For each level, contains the regexp that matches at that level only.
 "
 let s:levelRegexpDict = {
@@ -720,6 +722,18 @@ if !exists("*s:GoBackLink")
   endfunction
 endif
 
+function! s:MdTags()
+    let l:markdown_conf = s:pluginPath.'/tools/markdown.ctags'
+    let l:ctags_options = get(g:, 'vim_markdown_ctags_options', '-R')
+    let l:ctags_path = get(g:, 'vim_markdown_ctags_path', 'ctags')
+    let l:md_path = fnamemodify(expand('%:~'), ':p:h')
+    execute '! '.shellescape(l:ctags_path)
+          \ .' --options='.shellescape(l:markdown_conf)
+          \ .' '.l:ctags_options
+          \ .' '.shellescape(l:md_path) 
+    
+endfunction
+
 function! s:MapNotHasmapto(lhs, rhs)
     if !hasmapto('<Plug>' . a:rhs)
         execute 'nmap <buffer>' . a:lhs . ' <Plug>' . a:rhs
@@ -769,6 +783,7 @@ command! -buffer Toc call s:Toc()
 command! -buffer Toch call s:Toc('horizontal')
 command! -buffer Tocv call s:Toc('vertical')
 command! -buffer Toct call s:Toc('tab')
+command! -buffer MdTags call s:MdTags()
 
 " Heavily based on vim-notes - http://peterodding.com/code/vim/notes/
 if exists('g:vim_markdown_fenced_languages')
