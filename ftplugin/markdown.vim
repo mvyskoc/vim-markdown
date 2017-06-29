@@ -46,6 +46,7 @@
 " e-+
 
 let s:pluginPath = expand('<sfile>:p:h:h')
+let b:markdown_wiki_root = ''
 
 " For each level, contains the regexp that matches at that level only.
 "
@@ -722,14 +723,47 @@ if !exists("*s:GoBackLink")
   endfunction
 endif
 
+" The function search all top directories and it tries to find
+" mdwiki file. This folder is designated as wiki root folder and it is returnde
+" by this function
+function! Markdown_GetRootWikiPath(file)
+    let l:md_path = fnamemodify(expand(a:file.':~'), ':p:h')
+    while 1   
+        if filereadable(l:md_path.'/mdwiki')
+            return l:md_path
+        endif
+        let l:new_md_path = fnamemodify(l:md_path, ':h')
+        if len(l:new_md_path) < len(l:md_path)
+            let l:md_path = l:new_md_path
+        else
+            break
+        endif 
+    endwhile
+    return ''
+endfunction
+
+function! Markdown_process_mdwiki()
+    let l:root_wiki = Markdown_GetRootWikiPath('%')
+    if len(l:root_wiki) > 0
+        let b:markdown_wiki_root = l:root_wiki
+        execute ":set tags=".l:root_wiki.'/tags'
+        execute 'source '.l:root_wiki.'/mdwiki' 
+        silent echomsg "Markdown wiki, read configuration ".l:root_wiki.'/mdwiki'
+    endif
+endfunction
+
 function! s:MdTags()
     let l:markdown_conf = s:pluginPath.'/tools/markdown.ctags'
     let l:ctags_options = get(g:, 'vim_markdown_ctags_options', '-R')
     let l:ctags_path = get(g:, 'vim_markdown_ctags_path', 'ctags')
-    let l:md_path = fnamemodify(expand('%:~'), ':p:h')
+    let l:md_path = b:markdown_wiki_root
+    if len(b:markdown_wiki_root) == 0
+        let l:md_path = fnamemodify(expand('%:~'), ':p:h')
+    endif
     execute '! '.shellescape(l:ctags_path)
           \ .' --options='.shellescape(l:markdown_conf)
           \ .' '.l:ctags_options
+          \ .' -f '.shellescape(l:md_path.'/tags')
           \ .' '.shellescape(l:md_path) 
     
 endfunction
@@ -900,5 +934,8 @@ augroup Mkd
     au CursorHold,CursorHoldI * call s:MarkdownRefreshSyntax(0)
     au BufWrite * call s:MarkdownBufferWrite() 
 augroup END
+
+
+call Markdown_process_mdwiki()
 
 " vim: ts=4 sw=4 et  
